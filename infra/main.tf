@@ -84,15 +84,9 @@ resource "azurerm_function_app_flex_consumption" "this" {
   maximum_instance_count = 40
   instance_memory_in_mb  = 2048
 
-  app_settings = merge(
-    {
-      "FUNCTIONS_EXTENSION_VERSION" = "~4"
-      "FUNCTIONS_WORKER_RUNTIME"    = "node"
-    },
-    var.product_updated_base_url == "" ? {} : {
-      PRODUCT_UPDATED_BASE_URL = var.product_updated_base_url
-    }
-  )
+  app_settings = var.product_updated_base_url == "" ? {} : {
+    PRODUCT_UPDATED_BASE_URL = var.product_updated_base_url
+  }
 
   site_config {
     application_insights_connection_string = azurerm_application_insights.this.connection_string
