@@ -57,60 +57,6 @@ jobs:
           terraform init -backend=false
           terraform validate
 
-  # PRs: show what the infrastructure change would be.
-  plan:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-    needs: build
-    runs-on: ubuntu-latest
-    # Azure variables and secret come from the "dev" GitHub environment.
-    environment: dev
-    permissions:
-      contents: read
-    env:
-      # Terraform azurerm provider + backend authenticate as a service principal
-      # with a client secret.
-      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
-      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
-      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      # Never silently fall back to `az login` (not available on the runner).
-      ARM_USE_CLI: false
-      # Optional overrides for infra/variables.tf.
-      TF_VAR_location: ${{ vars.AZURE_LOCATION || 'uksouth' }}
-
-    defaults:
-      run:
-        working-directory: infra
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Check Azure credentials are configured
-        run: |
-          missing=0
-          for v in ARM_CLIENT_ID ARM_TENANT_ID ARM_SUBSCRIPTION_ID ARM_CLIENT_SECRET; do
-            if [ -z "${!v}" ]; then echo "::error::$v is empty - set the matching variable/secret in the dev environment"; missing=1; fi
-          done
-          exit $missing
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: ${{ env.TF_VERSION }}
-
-      - name: Terraform init
-        run: >
-          terraform init
-          -backend-config="resource_group_name=${{ vars.TFSTATE_RESOURCE_GROUP }}"
-          -backend-config="storage_account_name=${{ vars.TFSTATE_STORAGE_ACCOUNT }}"
-          -backend-config="container_name=${{ vars.TFSTATE_CONTAINER || 'tfstate' }}"
-          -backend-config="key=cicd-svc.tfstate"
-          -backend-config="use_azuread_auth=true"
-
-      - name: Terraform plan
-        run: terraform plan -lock-timeout=5m
-
   # CD: on main, apply the infrastructure then publish the code to it.
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
@@ -120,17 +66,15 @@ jobs:
     environment: dev
     permissions:
       contents: read
+      id-token: write
     env:
-      # Terraform azurerm provider + backend authenticate as a service principal
-      # with a client secret.
       ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
       ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
       ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-      ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
-      # Never silently fall back to `az login` (not available on the runner).
-      ARM_USE_CLI: false
+      ARM_USE_OIDC: true
+      ARM_USE_AZUREAD: true
       # Optional overrides for infra/variables.tf.
-      TF_VAR_location: ${{ vars.AZURE_LOCATION || 'uksouth' }}
+      TF_VAR_location: ${{ vars.AZURE_LOCATION || 'francecentral' }}
 
     steps:
       - name: Checkout
@@ -145,8 +89,8 @@ jobs:
       - name: Check Azure credentials are configured
         run: |
           missing=0
-          for v in ARM_CLIENT_ID ARM_TENANT_ID ARM_SUBSCRIPTION_ID ARM_CLIENT_SECRET; do
-            if [ -z "${!v}" ]; then echo "::error::$v is empty - set the matching variable/secret in the dev environment"; missing=1; fi
+          for v in ARM_CLIENT_ID ARM_TENANT_ID ARM_SUBSCRIPTION_ID; do
+            if [ -z "${!v}" ]; then echo "::error::$v is empty - set the matching variable in the dev environment"; missing=1; fi
           done
           exit $missing
 
@@ -166,6 +110,7 @@ jobs:
           -backend-config="container_name=${{ vars.TFSTATE_CONTAINER || 'tfstate' }}"
           -backend-config="key=cicd-svc.tfstate"
           -backend-config="use_azuread_auth=true"
+          -backend-config="use_oidc=true"
 
       - name: Terraform plan
         working-directory: infra
@@ -185,7 +130,9 @@ jobs:
       - name: Azure login (for Functions Core Tools)
         uses: azure/login@v2
         with:
-          creds: '{"clientId":"${{ vars.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ vars.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ vars.AZURE_TENANT_ID }}"}'
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
       - name: Install dependencies
         run: npm ci

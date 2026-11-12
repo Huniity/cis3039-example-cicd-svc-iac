@@ -5,9 +5,9 @@ variable "subscription_id" {
 }
 
 variable "location" {
-  description = "Azure region, which must be permitted by your subscription's policy (e.g. uksouth)."
+  description = "Azure region, which must be permitted by your subscription's policy (e.g. francecentral)."
   type        = string
-  default     = "uksouth"
+  default     = "francecentral"
 }
 
 variable "project" {
