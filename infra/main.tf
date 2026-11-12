@@ -38,6 +38,12 @@ resource "azurerm_storage_account" "func" {
   }
 }
 
+resource "azurerm_storage_container" "function_deployment" {
+  name                  = "function-deployment"
+  storage_account_id    = azurerm_storage_account.func.id
+  container_access_type = "private"
+}
+
 # `az functionapp create` adds this implicitly, named after the Function App.
 resource "azurerm_application_insights" "this" {
   name                = "${local.name_prefix}-func"
@@ -51,40 +57,46 @@ resource "azurerm_application_insights" "this" {
   }
 }
 
-# 3. Consumption plan (az functionapp create --consumption-plan-location)
+# 3. Flex Consumption plan (FC1)
 resource "azurerm_service_plan" "this" {
   name                = "${local.name_prefix}-plan"
   resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
-  os_type             = "Windows"
-  sku_name            = "Y1"
+  os_type             = "Linux"
+  sku_name            = "FC1"
 }
 
-# Function App (az functionapp create --runtime node --functions-version 4)
-resource "azurerm_windows_function_app" "this" {
+# Flex Consumption Function App (Linux)
+resource "azurerm_function_app_flex_consumption" "this" {
   name                = "${local.name_prefix}-func"
   resource_group_name = azurerm_resource_group.this.name
   location            = azurerm_resource_group.this.location
   service_plan_id     = azurerm_service_plan.this.id
   https_only          = true
 
-  storage_account_name       = azurerm_storage_account.func.name
-  storage_account_access_key = azurerm_storage_account.func.primary_access_key
+  storage_container_type      = "blobContainer"
+  storage_container_endpoint  = "${azurerm_storage_account.func.primary_blob_endpoint}${azurerm_storage_container.function_deployment.name}"
+  storage_authentication_type = "StorageAccountConnectionString"
+  storage_access_key          = azurerm_storage_account.func.primary_access_key
 
-  functions_extension_version = "~4"
+  runtime_name           = "node"
+  runtime_version        = var.node_version
+  maximum_instance_count = 40
+  instance_memory_in_mb  = 2048
 
-  app_settings = var.product_updated_base_url == "" ? {} : {
-    PRODUCT_UPDATED_BASE_URL = var.product_updated_base_url
-  }
+  app_settings = merge(
+    {
+      "FUNCTIONS_EXTENSION_VERSION" = "~4"
+      "FUNCTIONS_WORKER_RUNTIME"    = "node"
+    },
+    var.product_updated_base_url == "" ? {} : {
+      PRODUCT_UPDATED_BASE_URL = var.product_updated_base_url
+    }
+  )
 
   site_config {
     application_insights_connection_string = azurerm_application_insights.this.connection_string
 
-    application_stack {
-      node_version = var.node_version
-    }
-
-    # az functionapp cors add --allowed-origins ...
     dynamic "cors" {
       for_each = length(var.cors_allowed_origins) > 0 ? [1] : []
 
@@ -94,11 +106,4 @@ resource "azurerm_windows_function_app" "this" {
     }
   }
 
-  # `func azure functionapp publish` manages these settings; don't fight it.
-  lifecycle {
-    ignore_changes = [
-      app_settings["WEBSITE_RUN_FROM_PACKAGE"],
-      app_settings["WEBSITE_ENABLE_SYNC_UPDATE_SITE"],
-    ]
-  }
 }

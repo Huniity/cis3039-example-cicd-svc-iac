@@ -23,9 +23,9 @@ variable "environment" {
 }
 
 variable "node_version" {
-  description = "Node.js version for the Function App runtime."
+  description = "Node.js version for the Linux Flex Consumption Function App runtime."
   type        = string
-  default     = "~22"
+  default     = "22"
 }
 
 variable "product_updated_base_url" {

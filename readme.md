@@ -97,7 +97,7 @@ az policy assignment list \
   -o tsv
 ```
 
-### Create a Resource Group and Azure Function App
+### Create a Resource Group and Flex Consumption Function App
 
 1. Create a resource group (if you do not already have one for this deployment):
 
@@ -126,8 +126,9 @@ az functionapp create \
   --name <your-function-app> \
   --resource-group <your-resource-group> \
   --storage-account <yourfuncstorageaccount> \
-  --consumption-plan-location <permitted-location> \
+  --flexconsumption-location <permitted-location> \
   --runtime node \
+  --runtime-version 22 \
   --functions-version 4
 ```
 
@@ -159,7 +160,7 @@ az functionapp cors add \
 
 ## Terraform and CI/CD
 
-The `infra/` folder declares the same resources as the manual Azure Setup above (resource group, storage account, consumption plan, Function App, Application Insights). Resource names are generated as `<project>-<environment>-<random suffix>`, e.g. `shopping-lab-x7k2qm-rg`.
+The `infra/` folder declares the same resources as the manual Azure Setup above (resource group, storage account, Flex Consumption plan, Function App, Application Insights). The Function App runs on Linux Node.js 22. Resource names are generated as `<project>-<environment>-<random suffix>`, e.g. `shopping-lab-x7k2qm-rg`.
 
 The workflow `.github/workflows/build.yml` runs `build` on pull requests and pushes. Pushes to `main` and manual runs on `main` also run `deploy`: Terraform applies the infrastructure, publishes the Functions app, and smoke-tests `GET /api/products`. Azure access uses GitHub OIDC with a user-assigned managed identity; no client secret is stored in GitHub. The `dev` environment must be limited to the `main` branch.
 
