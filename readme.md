@@ -209,7 +209,7 @@ PRINCIPAL_ID=$(az identity show --name "$IDENTITY_NAME" --resource-group "$TFSTA
 az identity federated-credential create --name github-dev \
   --identity-name "$IDENTITY_NAME" --resource-group "$TFSTATE_RG" \
   --issuer https://token.actions.githubusercontent.com \
-  --subject repo:Huniity/cis3039-example-cicd-svc-iac:environment:dev \
+  --subject 'repo:Huniity@137334610/cis3039-example-cicd-svc-iac@1455813345:environment:dev' \
   --audiences api://AzureADTokenExchange
 
 az role assignment create --assignee-object-id "$PRINCIPAL_ID" \
